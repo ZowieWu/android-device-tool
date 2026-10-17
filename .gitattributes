@@ -1,0 +1,6 @@
+# 仓库内统一用 LF，检出时不自动转换
+* text=auto eol=lf
+
+# Windows 专用脚本必须保持 CRLF（批处理文件用 LF 会出问题）
+*.bat text eol=crlf
+*.cmd text eol=crlf
