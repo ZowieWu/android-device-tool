@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 编辑器 / IDE（这些是"你的机器"，不是"这个项目"）
+.idea/
+.vscode/
+*.swp
+
+# 输出物（工具跑出来的东西不进仓库）
+out/
+*.xlsx
+*.png
