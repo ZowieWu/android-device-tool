@@ -1,0 +1,15 @@
+Filesystem      Size Used Avail Use% Mounted on
+tmpfs           2.9G 1.3M  2.9G   1% /dev
+tmpfs           2.9G 4.0K  2.9G   1% /mnt
+/dev/block/sda2 2.4G 1.7G  669M  74% /
+/dev/block/sdb2  23G 154M   22G   1% /data
+tmpfs           2.9G  12K  2.9G   1% /apex
+tmpfs           2.9G 456K  2.9G   1% /linkerconfig
+/dev/block/sdb1 488M  44K  452M   1% /cache
+/dev/block/sdc2  48G  18M   46G   1% /data/media
+tmpfs           2.9G    0  2.9G   0% /data_mirror
+Applications    400G 129G  271G  33% /mnt/shared/Applications
+Pictures        400G 129G  271G  33% /mnt/shared/Pictures
+Misc            400G 129G  271G  33% /mnt/shared/Misc
+Bug             400G 129G  271G  33% /mnt/shared/Bug
+/dev/fuse        48G  18M   46G   1% /storage/emulated
