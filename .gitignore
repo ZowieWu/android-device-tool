@@ -1,6 +1,8 @@
 # Python
 __pycache__/
 *.py[cod]
+.pytest_cache/
+allure-results/
 *.egg-info/
 .venv/
 venv/

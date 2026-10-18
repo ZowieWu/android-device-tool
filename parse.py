@@ -1,7 +1,6 @@
 """第二格：把 df -h 的输出拆成一条条记录。
 
 今天不需要模拟器：samples/ 里存着真实输出，离线就能开发。
-两个空要你填——填对了，说明你真读懂了那份数据。
 """
 
 
@@ -12,13 +11,38 @@ def parse_df(output: str) -> list[list[str]]:
     每条记录必须是 6 个字段：Filesystem / Size / Used / Avail / Use% / Mounted on
     """
     lines = output.strip().splitlines()
-    data = lines[1:]          # 空 A：表头那一行要不要算进数据？
+    data = lines[1:]                     # 跳过表头
 
     rows = []
     for line in data:
-        parts = line.split(None, 5)   # 空 B：表头有几个词？数据行切几段才对？
+        parts = line.split(None, 5)      # 最多切 5 刀 → 6 段
         rows.append(parts)
     return rows
+
+
+# ---------------------------------------------------------------
+# 第三格：白名单——哪些行有资格进表
+# ---------------------------------------------------------------
+
+KEEP = {"/data"}   # 空 A：有资格进表的挂载点。
+                 # 提示：你的工具要回答"这台设备哪个地方的存储要满了"。
+                 #      看一遍那 14 行的 Mounted on，哪个才是设备自己的存储？
+
+
+def pick(rows: list[list[str]], keep=None) -> tuple[list, list]:
+    """按白名单筛行，返回 (留下的行, [(被丢掉的行, 原因), ...])。
+
+    被丢掉的行必须带原因：静默丢弃 = 三个月后没人知道表里为什么少了 13 行。
+    """
+    keep = KEEP if keep is None else keep
+    kept, dropped = [], []
+    for row in rows:
+        mount = row[-1]
+        if mount in keep:                                  # 空 B：怎么判断它在不在白名单里？
+            kept.append(row)
+        else:
+            dropped.append((row, "不在白名单"))
+    return kept, dropped
 
 
 if __name__ == "__main__":
@@ -27,6 +51,14 @@ if __name__ == "__main__":
         text = f.read()
 
     rows = parse_df(text)
-    print(f"一共 {len(rows)} 条记录")
-    for row in rows:
-        print(f"{len(row)} 段 | {row}")
+    print(f"一共 {len(rows)} 条记录\n")
+
+    kept, dropped = pick(rows)
+    print(f"进表 {len(kept)} 行：")
+    for row in kept:
+        print("  ", row)
+
+    print(f"\n排除 {len(dropped)} 行（示例）：")
+    for row, reason in dropped[:3]:
+        print("  ", row[-1], "→", reason)
+    print(f"  ……共 {len(dropped)} 行")
