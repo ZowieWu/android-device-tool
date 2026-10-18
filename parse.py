@@ -45,6 +45,21 @@ def pick(rows: list[list[str]], keep=None) -> tuple[list, list]:
     return kept, dropped
 
 
+def humanize(k: int) -> str:
+    """把 K 变成人能读的单位：2048 → '2.0M'，1048576 → '1.0G'。
+
+    判断的对象必须和显示的对象是同一个：
+    1048570K 的"原始值"不到 1G，但它四舍五入后会显示成 1024.0M ——
+    所以要先换算再判断，否则用户会看到"1024.0M"这种不存在的单位写法。
+    """
+    m = round(k / 1024, 1)          # 先算：它有多少 M（按将要显示的精度）
+    if m >= 1024:                   # 再判：这个显示值是不是已经够 1G 了
+        return f"{k / 1024 ** 2:.1f}G"
+    if k >= 1024:
+        return f"{m:.1f}M"
+    return f"{k}K"
+
+
 if __name__ == "__main__":
     # 离线模式：直接拿仓库里那份真实输出当输入
     with open("samples/df-h-ldplayer14.txt", encoding="utf-8") as f:

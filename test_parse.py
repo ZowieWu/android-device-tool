@@ -41,3 +41,22 @@ def test_mount_point_with_space():
     rows = parse.parse_df(fake)
     assert len(rows) == 1
     assert rows[0][-1] == "/mnt/media_rw/My Disk"
+
+
+def test_humanize_basic():
+    """常规值：单位换对了就行。"""
+    assert parse.humanize(512) == "512K"
+    assert parse.humanize(2048) == "2.0M"
+    assert parse.humanize(1048576) == "1.0G"
+
+
+def test_humanize_at_boundary():
+    """边界值：1048570K = 1023.99M，四舍五入会显示成 1024.0M —— 必须进位成 G。
+
+    这个用例是回归测试：它锁定"判断的对象必须等于显示的对象"这条规则。
+    """
+    assert parse.humanize(1048570) == "1.0G"
+    # 差一点点、但四舍五入后仍然够进位的那个点
+    assert parse.humanize(1048525) == "1.0G"
+    # 再差一点就不该进位了（1023.9M）
+    assert parse.humanize(1048524) == "1023.9M"
