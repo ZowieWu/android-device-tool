@@ -60,6 +60,30 @@ def humanize(k: int) -> str:
     return f"{k}K"
 
 
+def match(rows: list[list[str]], paths: list[str]) -> tuple[list, list]:
+    """按清单匹配 df / du 的行。
+
+    返回 (命中, 未命中)：
+      命中   = [(path, row), ...]  —— 按 paths 里的顺序，方便和清单逐行对齐
+      未命中 = [path, ...]         —— 清单里有、但数据里没找到的
+
+    rows 每一条的"最后一列"就是路径。
+    这一步的用途：它把"漏了哪几条"变成一个看得见的数字，而不是让人以为填满了。
+    """
+    hits, misses = [], []
+    for path in paths:                 # ① 按清单顺序走（顺序由需求决定）
+        found = None
+        for row in rows:               # ② 每条数据看一眼
+            if row[-1] == path:        # ③ 路径对上了
+                found = row
+                break                  # ④ 找到就停，别重复计数
+        if found is None:              # ⑤ 没找到
+            misses.append(path)                      # 空 A：这个 path 应该去哪个列表？
+        else:
+            hits.append((path,found))                      # 空 B：hits 里每一项要长成什么形状？（看文档注释）
+    return hits, misses
+
+
 if __name__ == "__main__":
     # 离线模式：直接拿仓库里那份真实输出当输入
     with open("samples/df-h-ldplayer14.txt", encoding="utf-8") as f:

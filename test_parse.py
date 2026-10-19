@@ -60,3 +60,25 @@ def test_humanize_at_boundary():
     assert parse.humanize(1048525) == "1.0G"
     # 再差一点就不该进位了（1023.9M）
     assert parse.humanize(1048524) == "1023.9M"
+
+
+# ---------------------------------------------------------------
+# 下面两条是"规格"，等你把 parse.match() 写出来让它们变绿
+# ---------------------------------------------------------------
+
+def test_match_counts_hits_and_misses():
+    """清单 3 条、数据里只存在 2 条 → 命中 2，未命中 1（且名字对得上）。"""
+    rows = parse.parse_df(SAMPLE)
+    hits, misses = parse.match(rows, ["/data", "/dev", "/nope"])
+    assert len(hits) == 2
+    assert misses == ["/nope"]
+
+
+def test_match_keeps_whole_row():
+    """命中时要把整行原样带出来，不是只给路径。"""
+    rows = parse.parse_df(SAMPLE)
+    hits, misses = parse.match(rows, ["/data"])
+    assert misses == []
+    path, row = hits[0]
+    assert path == "/data"
+    assert len(row) == 6
