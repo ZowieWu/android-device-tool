@@ -79,6 +79,24 @@ def parse_du(output: str) -> list[list[str]]:
     return rows
 
 
+def top_n(rows: list[list[str]], n: int = 5) -> list[tuple[int, str]]:
+    """按占用从大到小取前 n 条，返回 [(大小K, 路径), ...]。
+
+    给调试用：一眼看出这台设备上哪个目录最占地方。
+
+    三个新东西：
+      int(row[0])        —— 字符串 "37908" 变数字 37908。不转的话，排序会按"字典序"：
+                            "9" 比 "10" 大，因为它逐位比较字符。
+      pairs.sort(key=..) —— key 是个函数，告诉它"拿每一项的哪一部分来比大小"。
+      lambda p: p[0]     —— 一个没名字的小函数，等价于"给我 p，我还你 p[0]"。
+    """
+    pairs = []
+    for row in rows:
+        pairs.append((int(row[0]), row[1]))
+    pairs.sort(key=lambda p: p[0], reverse=True)   # reverse=True = 从大到小
+    return pairs[:n]
+
+
 def humanize(k: int) -> str:
     """把 K 变成人能读的单位：2048 → '2.0M'，1048576 → '1.0G'。
 

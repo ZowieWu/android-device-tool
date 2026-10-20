@@ -148,3 +148,18 @@ def test_load_paths_skips_comments_and_blanks():
     assert all(p.strip() for p in paths), "空行必须被跳过"
     assert paths[0] == "data/fonts"      # 第一个非注释、非空行
     assert "data" in paths
+
+# ---------------------------------------------------------------
+# 练习：top_n()（排序 + lambda）
+# ---------------------------------------------------------------
+
+def test_top_n_orders_by_size_desc():
+    """按大小从大到小；返回 (数字, 路径) 的元组。"""
+    rows = parse.parse_du("100\t/data/a\n900\t/data/b\n50\t/data/c")
+    assert parse.top_n(rows, 2) == [(900, "/data/b"), (100, "/data/a")]
+
+
+def test_top_n_sorts_as_numbers_not_strings():
+    """关键的坑：字符串排序时 "9" > "100"，数字排序时 100 > 9。"""
+    rows = parse.parse_du("9\t/data/small\n100\t/data/big")
+    assert parse.top_n(rows, 1) == [(100, "/data/big")]
