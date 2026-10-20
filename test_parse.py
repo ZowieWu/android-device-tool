@@ -134,4 +134,4 @@ def test_match_still_exact_on_other_parts():
 def test_key_strips_only_leading_slash():
     assert parse._key("/data/fonts") == "data/fonts"
     assert parse._key("data/fonts") == "data/fonts"
-    assert parse._key("/data/log/") == "data/log/"     # 尾斜杠不动
+    assert parse._key("/data/log/") == "data/log/"     # 尾斜杠不动,归一化

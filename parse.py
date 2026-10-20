@@ -81,7 +81,7 @@ def humanize(k: int) -> str:
 
 
 def _key(path: str) -> str:
-    """比较用的键：只剥前导 /，其余原样。"""
+    """比较用的键：只剥前导 /，其余原样，做归一化处理。"""
     return path.lstrip("/")
 
 
