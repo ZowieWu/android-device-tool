@@ -14,3 +14,9 @@ data/local
 data/log
 data/ota_cache
 data
+
+# 下面两条是故意写的"设备上不存在"的路径，用来验证 misses 逻辑真的会被跑到。
+# 注意：`data/log` 也不在本机样本里，但它是**环境里真没有**，不是故意造的。
+# 两种都会出现在"未命中"里 —— 工具只说事实，判断是人做的。
+data/DivideDebug
+data/DivideAI/ai_data

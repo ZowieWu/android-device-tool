@@ -47,6 +47,20 @@ def pick(rows: list[list[str]], keep=None) -> tuple[list, list]:
     return kept, dropped
 
 
+def load_paths(file: str = "paths.example.txt") -> list[str]:
+    """读路径清单：跳过注释行（以 # 开头）和空行，其余按原样返回，顺序不变。
+
+    提示：这是"遍历 + 判断 + 放进列表"——你已经写过三次的形状。
+    """
+    paths = []
+    with open(file, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#"):
+                paths.append(line)
+    return paths
+
+
 def parse_du(output: str) -> list[list[str]]:
     """把 du 的输出拆开。
 

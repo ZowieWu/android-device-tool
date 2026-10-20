@@ -135,3 +135,16 @@ def test_key_strips_only_leading_slash():
     assert parse._key("/data/fonts") == "data/fonts"
     assert parse._key("data/fonts") == "data/fonts"
     assert parse._key("/data/log/") == "data/log/"     # 尾斜杠不动,归一化
+
+
+# ---------------------------------------------------------------
+# 第六格的规格：load_paths()（读清单：跳过 # 注释和空行）
+# ---------------------------------------------------------------
+
+def test_load_paths_skips_comments_and_blanks():
+    paths = parse.load_paths("paths.example.txt")
+    assert paths, "清单不能为空"
+    assert all(not p.startswith("#") for p in paths)
+    assert all(p.strip() for p in paths), "空行必须被跳过"
+    assert paths[0] == "data/fonts"      # 第一个非注释、非空行
+    assert "data" in paths
