@@ -11,11 +11,11 @@ def parse_df(output: str) -> list[list[str]]:
     每条记录必须是 6 个字段：Filesystem / Size / Used / Avail / Use% / Mounted on
     """
     lines = output.strip().splitlines()
-    data = lines[1:]                     # 跳过表头
+    data = lines[1:]  # 跳过表头
 
     rows = []
     for line in data:
-        parts = line.split(None, 5)      # 最多切 5 刀 → 6 段
+        parts = line.split(None, 5)  # 最多切 5 刀 → 6 段
         rows.append(parts)
     return rows
 
@@ -24,9 +24,11 @@ def parse_df(output: str) -> list[list[str]]:
 # 第三格：白名单——哪些行有资格进表
 # ---------------------------------------------------------------
 
-KEEP = {"/data"}   # 空 A：有资格进表的挂载点。
-                 # 提示：你的工具要回答"这台设备哪个地方的存储要满了"。
-                 #      看一遍那 14 行的 Mounted on，哪个才是设备自己的存储？
+KEEP = {"/data"}  # 空 A：有资格进表的挂载点。
+
+
+# 提示：你的工具要回答"这台设备哪个地方的存储要满了"。
+#      看一遍那 14 行的 Mounted on，哪个才是设备自己的存储？
 
 
 def pick(rows: list[list[str]], keep=None) -> tuple[list, list]:
@@ -38,11 +40,29 @@ def pick(rows: list[list[str]], keep=None) -> tuple[list, list]:
     kept, dropped = [], []
     for row in rows:
         mount = row[-1]
-        if mount in keep:                                  # 空 B：怎么判断它在不在白名单里？
+        if mount in keep:  # 空 B：怎么判断它在不在白名单里？
             kept.append(row)
         else:
             dropped.append((row, "不在白名单"))
     return kept, dropped
+
+
+def parse_du(output: str) -> list[list[str]]:
+    """把 du 的输出拆开。
+
+    每行形如：`37908<TAB>/data/local/file-cache`
+    返回：[['37908', '/data/local/file-cache'], ...]
+
+    提示：这是"2 个字段"——和 parse_df 那个 6 字段是**同一个形状**，只是数字不一样。
+    """
+    lines = output.strip().splitlines()
+    data = lines[:]
+
+    rows = []
+    for line in data:
+        parts = line.split(None, 1)  # 最多切 1 刀 → 2 段
+        rows.append(parts)
+    return rows
 
 
 def humanize(k: int) -> str:
@@ -52,12 +72,17 @@ def humanize(k: int) -> str:
     1048570K 的"原始值"不到 1G，但它四舍五入后会显示成 1024.0M ——
     所以要先换算再判断，否则用户会看到"1024.0M"这种不存在的单位写法。
     """
-    m = round(k / 1024, 1)          # 先算：它有多少 M（按将要显示的精度）
-    if m >= 1024:                   # 再判：这个显示值是不是已经够 1G 了
+    m = round(k / 1024, 1)  # 先算：它有多少 M（按将要显示的精度）
+    if m >= 1024:  # 再判：这个显示值是不是已经够 1G 了
         return f"{k / 1024 ** 2:.1f}G"
     if k >= 1024:
         return f"{m:.1f}M"
     return f"{k}K"
+
+
+def _key(path: str) -> str:
+    """比较用的键：只剥前导 /，其余原样。"""
+    return path.lstrip("/")
 
 
 def match(rows: list[list[str]], paths: list[str]) -> tuple[list, list]:
@@ -71,16 +96,16 @@ def match(rows: list[list[str]], paths: list[str]) -> tuple[list, list]:
     这一步的用途：它把"漏了哪几条"变成一个看得见的数字，而不是让人以为填满了。
     """
     hits, misses = [], []
-    for path in paths:                 # ① 按清单顺序走（顺序由需求决定）
+    for path in paths:  # ① 按清单顺序走（顺序由需求决定）
         found = None
-        for row in rows:               # ② 每条数据看一眼
-            if row[-1] == path:        # ③ 路径对上了
+        for row in rows:  # ② 每条数据看一眼
+            if _key(row[-1]) == _key(path):  # ③ 路径对上了
                 found = row
-                break                  # ④ 找到就停，别重复计数
-        if found is None:              # ⑤ 没找到
-            misses.append(path)                      # 空 A：这个 path 应该去哪个列表？
+                break  # ④ 找到就停，别重复计数
+        if found is None:  # ⑤ 没找到
+            misses.append(path)  # 空 A：这个 path 应该去哪个列表？
         else:
-            hits.append((path,found))                      # 空 B：hits 里每一项要长成什么形状？（看文档注释）
+            hits.append((path, found))  # 空 B：hits 里每一项要长成什么形状？（看文档注释）
     return hits, misses
 
 

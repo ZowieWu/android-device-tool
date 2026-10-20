@@ -82,3 +82,56 @@ def test_match_keeps_whole_row():
     path, row = hits[0]
     assert path == "/data"
     assert len(row) == 6
+
+# ---------------------------------------------------------------
+# 第四格的规格：parse_du()（du 的输出 = 数值 + 路径，两段）
+# ---------------------------------------------------------------
+
+DU_SAMPLE = open("samples/du-data.txt", encoding="utf-8").read()
+
+
+def test_parse_du_two_fields():
+    """du 的每一行都必须拆成 2 段：数值 + 路径。"""
+    rows = parse.parse_du(DU_SAMPLE)
+    assert len(rows) > 1000
+    assert {len(r) for r in rows} == {2}
+
+
+def test_parse_du_value_is_digits():
+    """第一段是纯数字（单位 K），不允许出现单位字符。"""
+    rows = parse.parse_du(DU_SAMPLE)
+    assert all(r[0].isdigit() for r in rows)
+
+
+def test_parse_du_keeps_path_intact():
+    """第二段是完整路径，保留前导 /（归一化是下一步的事，不是解析的事）。"""
+    rows = parse.parse_du("37908\t/data/local/file-cache")
+    assert rows[0] == ["37908", "/data/local/file-cache"]
+
+
+# ---------------------------------------------------------------
+# 第五格的规格：归一化（清单不带前导 /，du 输出带前导 /）
+# ---------------------------------------------------------------
+
+def test_match_normalizes_leading_slash():
+    """清单写 `data/fonts`，数据里是 `/data/fonts` —— 也必须匹配上。
+
+    注意：返回的 path 应该保持清单里的原样（data/fonts），不要偷偷改数据。
+    """
+    rows = parse.parse_du("100\t/data/fonts")
+    hits, misses = parse.match(rows, ["data/fonts"])
+    assert misses == []
+    assert hits[0][0] == "data/fonts"
+
+
+def test_match_still_exact_on_other_parts():
+    """归一化只剥前导 /，不能把 `data/fonts` 和 `data/fonts/files` 混为一谈。"""
+    rows = parse.parse_du("100\t/data/fonts/files")
+    hits, misses = parse.match(rows, ["data/fonts"])
+    assert hits == []
+    assert misses == ["data/fonts"]
+
+def test_key_strips_only_leading_slash():
+    assert parse._key("/data/fonts") == "data/fonts"
+    assert parse._key("data/fonts") == "data/fonts"
+    assert parse._key("/data/log/") == "data/log/"     # 尾斜杠不动
