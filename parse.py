@@ -61,6 +61,62 @@ def load_paths(file: str = "paths.example.txt") -> list[str]:
     return paths
 
 
+def growth(before_rows: list, after_rows: list) -> list:
+    """按路径对齐"跑机前 / 跑机后"两次采集，算增长。
+
+    参数是两次的命中行：`[[大小K, 路径], ...]`（可能只包含本阶段命中的行）。
+    返回 `[(path, before_k, after_k, pct), ...]`，按 path 排序，方便和清单逐行对齐：
+
+      两次都有    → pct = (after - before) / before * 100
+                    **before == 0 时 pct = None**（不可计算，绝不出现 #DIV/0!）
+      只有 before → after_k = None, pct = None（跑机后消失了）
+      只有 after  → before_k = None, pct = None（跑机后新出现）
+
+    提示：这是"两次数据按同一个键对齐"——你写过的 match() 是它的小号版本。
+    ① 把 before 变成字典：{路径: 大小}
+    ② 把 after  变成字典：{路径: 大小}
+    ③ 路径全集 = 两边的键合起来（去重）
+    ④ 按路径排序，逐条算：
+     两边都有 → pct = (a - b) / b * 100；b == 0 时 pct = None
+     只有 before → (path, b, None, None)
+     只有 after  → (path, None, a, None)
+    """
+    # 1. 建字典
+    before_dict = {}
+    for row in before_rows:
+        path = row[1]  # 取出路径
+        size = int(row[0])  # 取出大小并转为整数
+        before_dict[path] = size
+
+    after_dict = {}
+    for row in after_rows:
+        path = row[1]
+        size = int(row[0])
+        after_dict[path] = size
+
+    # 2. 取合集并排序
+    all_paths = set(before_dict.keys()) | set(after_dict.keys())
+    sorted_paths = sorted(all_paths)
+
+    # 3. 核心计算逻辑
+    result = []  # ① 准备一个空列表
+
+    for path in sorted_paths:  # ② 你算好的排序路径，现在用上
+        bk = before_dict.get(path)  # ③ 取两边的值（可能是 None）
+        ak = after_dict.get(path)
+
+        if bk is not None and ak is not None:
+            if bk == 0:  # 两边都有
+                result.append((path, bk, ak, None))
+            else:
+                pct = (ak - bk) / bk * 100
+                result.append((path, bk, ak, pct))
+        elif bk is not None:  # 只有 before：跑机后消失了
+            result.append((path, bk, None, None))
+        else:  # 只有 after：跑机后新出现
+            result.append((path, None, ak, None))
+
+    return result                      # ④ 最后返回
 def parse_du(output: str) -> list[list[str]]:
     """把 du 的输出拆开。
 

@@ -1,17 +1,17 @@
-"""一条命令：采一次 /data，打印"命中 M/N"和未命中清单。
+"""一条命令完成一次采集；两次采集之间能自动算增长%。
 
-第 2 周目标。用法：
+用法：
 
-    python main.py                 # 连设备采（需要模拟器在跑）
-    python main.py --offline       # 不连设备，用 samples/du-data.txt
+    python main.py --stage before    # 跑机前采一次，存快照
+    python main.py --stage after     # 跑机后采一次，自动和今天的 before 对比
+    python main.py --offline         # 不连设备，用 samples/du-data.txt
 
-输出示例：
-
-    共 1732 行原始数据，清单 5 条
-    命中 5/5
-    全部命中。
+快照位置：out/<串号>/<日期>-<阶段>.json（out/ 不进仓库）
 """
 
+import datetime
+import json
+import os
 import subprocess
 import sys
 
@@ -20,6 +20,7 @@ import parse
 # 两个硬编码：第一版故意的妥协，以后要改成"自动发现"（见 README）。
 ADB = r"D:\leidian\LDPlayer14\adb.exe"
 SERIAL = "emulator-5554"
+OUT_DIR = "out"
 
 
 def run_on_device(command: str) -> str:
@@ -37,14 +38,85 @@ def run_on_device(command: str) -> str:
     return result.stdout
 
 
-def report(raw: str, paths: list[str]) -> None:
-    """把一次采集的原始输出，变成一份"命中情况"报告。"""
-    rows = parse.parse_du(raw)
-    hits, misses = parse.match(rows, paths)
+def check_device() -> tuple[bool, str]:
+    """开跑前自检：返回 (能不能跑, 人话原因)。
 
+    查两件事，按"最常出错的顺序"排：
+      1) 设备在不在
+      2) 内部存储读不读得到（release 设备的常见坑）
+
+    为什么要有它：没有自检时，读不到 /data 只会得到一个 Permission denied 的异常，
+    人还得自己猜"是设备没连、还是权限不够、还是我命令写错了"。
+    """
+    try:
+        run_on_device("echo ok")
+    except Exception as e:
+        return False, (
+            "设备不可用。\n"
+            f"  原始报错：{e}\n"
+            "  处理：确认模拟器已启动；真机请确认数据线已连上、adb 授权已确认。"
+        )
+
+    try:
+        run_on_device("ls /data")
+    except Exception as e:
+        return False, (
+            "读不到设备内部存储（release 版本最常见的坑）。\n"
+            f"  原始报错：{e}\n"
+            "  处理：确认该设备已完成内部授权；模拟器请先执行 adb root。"
+        )
+
+    return True, "ok"
+
+
+# ---------------------------------------------------------------
+# 快照：把一次采集的结果落到磁盘，第二次采集才能和它对比
+# ---------------------------------------------------------------
+
+def to_growth_rows(hits: list) -> list:
+    """[(清单路径, 原始行), ...] → [[大小K, 路径], ...]（growth() 的输入形状）。
+
+    用"清单里的路径"当键（不是原始输出里的路径），这样两次采集才对得上。
+    """
+    return [[int(row[0]), path] for path, row in hits]
+
+
+def snapshot_path(stage: str) -> str:
+    """out/<串号>/<日期>-<阶段>.json —— 同一天、同一台设备的两次采集放在一起。"""
+    today = datetime.date.today().isoformat()
+    folder = os.path.join(OUT_DIR, SERIAL)
+    os.makedirs(folder, exist_ok=True)
+    return os.path.join(folder, f"{today}-{stage}.json")
+
+
+def save_snapshot(stage: str, hits: list) -> str:
+    data = {
+        "stage": stage,
+        "serial": SERIAL,
+        "saved_at": datetime.datetime.now().isoformat(timespec="seconds"),
+        "rows": to_growth_rows(hits),
+    }
+    path = snapshot_path(stage)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    return path
+
+
+def load_snapshot(stage: str) -> dict | None:
+    path = snapshot_path(stage)
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+# ---------------------------------------------------------------
+# 输出
+# ---------------------------------------------------------------
+
+def report(rows: list, paths: list, hits: list, misses: list) -> None:
     print(f"共 {len(rows)} 行原始数据，清单 {len(paths)} 条")
     print(f"命中 {len(hits)}/{len(paths)}")
-
     if misses:
         print("\n未命中（清单里有、数据里没找到）：")
         for path in misses:
@@ -53,11 +125,55 @@ def report(raw: str, paths: list[str]) -> None:
         print("全部命中。")
 
 
+def report_growth(before_rows: list, after_rows: list) -> None:
+    print("\n增长（跑机前 → 跑机后）：")
+    print(f"  {'路径':32s} {'前':>9s} {'后':>9s} {'增长':>8s}")
+    for path, b, a, pct in parse.growth(before_rows, after_rows):
+        b_str = parse.humanize(b) if b is not None else "—"
+        a_str = parse.humanize(a) if a is not None else "—"
+        p_str = f"{pct:+.1f}%" if pct is not None else "—"
+        print(f"  {path:32s} {b_str:>9s} {a_str:>9s} {p_str:>8s}")
+
+
+# ---------------------------------------------------------------
+# 入口
+# ---------------------------------------------------------------
+
 if __name__ == "__main__":
-    if "--offline" in sys.argv:
+    offline = "--offline" in sys.argv
+
+    stage = None
+    if "--stage" in sys.argv:
+        stage = sys.argv[sys.argv.index("--stage") + 1]
+        if stage not in ("before", "after"):
+            print(f"[错误] --stage 只能是 before 或 after，你给的是 {stage!r}")
+            sys.exit(2)
+
+    if offline:
         with open("samples/du-data.txt", encoding="utf-8") as f:
             raw = f.read()
     else:
+        # 先自检，再采。不通过就带着人话退出，绝不交一张空表。
+        ok, reason = check_device()
+        if not ok:
+            print(f"[错误] {reason}")
+            print("\n已停止，未采集任何数据。")
+            sys.exit(1)
         raw = run_on_device("du /data")
 
-    report(raw, parse.load_paths("paths.example.txt"))
+    paths = parse.load_paths("paths.example.txt")
+    rows = parse.parse_du(raw)
+    hits, misses = parse.match(rows, paths)
+    report(rows, paths, hits, misses)
+
+    if stage:
+        saved = save_snapshot(stage, hits)
+        print(f"\n已存快照（{stage}）：{saved}")
+
+    if stage == "after":
+        before = load_snapshot("before")
+        if before is None:
+            print("\n[提示] 今天还没有 before 快照，没法对比。先跑：python main.py --stage before")
+        else:
+            print(f"\n对比对象：{before['saved_at']} 的 before 快照")
+            report_growth(before["rows"], to_growth_rows(hits))

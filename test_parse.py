@@ -163,3 +163,44 @@ def test_top_n_sorts_as_numbers_not_strings():
     """关键的坑：字符串排序时 "9" > "100"，数字排序时 100 > 9。"""
     rows = parse.parse_du("9\t/data/small\n100\t/data/big")
     assert parse.top_n(rows, 1) == [(100, "/data/big")]
+
+# ---------------------------------------------------------------
+# 第七格：growth()（两次采集 → 增长%）
+# ---------------------------------------------------------------
+
+def _rows(*pairs):
+    """小工具：_rows(("100","/data/a"), ...) → [["100","/data/a"], ...]"""
+    return [[str(k), p] for k, p in pairs]
+
+
+def test_growth_basic():
+    """正常增长：100K → 150K = +50%。"""
+    before = _rows((100, "/data/a"))
+    after = _rows((150, "/data/a"))
+    assert parse.growth(before, after) == [("/data/a", 100, 150, 50.0)]
+
+
+def test_growth_decrease():
+    """下降要能给负数，不能卡在 0。"""
+    before = _rows((200, "/data/a"))
+    after = _rows((150, "/data/a"))
+    assert parse.growth(before, after) == [("/data/a", 200, 150, -25.0)]
+
+
+def test_growth_before_zero_is_none():
+    """关键：before = 0 时 pct 必须是 None（不可计算），不能崩、也不能编一个数。"""
+    before = _rows((0, "/data/a"))
+    after = _rows((100, "/data/a"))
+    result = parse.growth(before, after)
+    assert result == [("/data/a", 0, 100, None)]
+
+
+def test_growth_missing_on_either_side():
+    """只在一边出现的路径也要占一行，另一侧写 None —— 不许静默丢掉。"""
+    before = _rows((100, "/data/a"))
+    after = _rows((50, "/data/b"))
+    result = parse.growth(before, after)
+    assert result == [
+        ("/data/a", 100, None, None),   # 跑机后消失了
+        ("/data/b", None, 50, None),    # 跑机后新出现
+    ]
