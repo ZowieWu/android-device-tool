@@ -102,6 +102,29 @@ def save_snapshot(stage: str, hits: list) -> str:
     return path
 
 
+def latest_before() -> dict | None:
+    """找**最近一次** before 快照（不管哪天）。
+
+    为什么不用"今天"：跑机常常跨夜——晚上采 before、第二天早上采 after，
+    用"日期"当键会让它们永远配不上对。业务主键是"这一轮跑机"，不是"某一天"。
+    """
+    folder = os.path.join(OUT_DIR, SERIAL)
+    if not os.path.isdir(folder):
+        return None
+
+    candidates = [
+        os.path.join(folder, name)
+        for name in os.listdir(folder)
+        if name.endswith("-before.json")
+    ]
+    if not candidates:
+        return None
+
+    newest = max(candidates, key=os.path.getmtime)
+    with open(newest, encoding="utf-8") as f:
+        return json.load(f)
+
+
 def load_snapshot(stage: str) -> dict | None:
     path = snapshot_path(stage)
     if not os.path.exists(path):
@@ -123,6 +146,28 @@ def report(rows: list, paths: list, hits: list, misses: list) -> None:
             print("  -", path)
     else:
         print("全部命中。")
+
+
+def write_excel(growth_rows: list, path: str) -> str:
+    """把 growth() 的结果写成一张 xlsx。
+
+    表头：路径 / 前(K) / 后(K) / 增长%
+    规则：None 写成**空单元格**——不用 0 冒充，也不写 "None" 字符串。
+
+    `import openpyxl` 放在函数里：没装这个库时，其它功能照常能用，只有调用它才会报错。
+    """
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "跑机数据"
+    ws.append(["路径", "前(K)", "后(K)", "增长%"])
+
+    for p, b, a, pct in growth_rows:
+        ws.append([p, b, a, None if pct is None else round(pct, 1)])
+
+    wb.save(path)
+    return path
 
 
 def report_growth(before_rows: list, after_rows: list) -> None:
@@ -171,9 +216,19 @@ if __name__ == "__main__":
         print(f"\n已存快照（{stage}）：{saved}")
 
     if stage == "after":
-        before = load_snapshot("before")
+        before = latest_before()
         if before is None:
-            print("\n[提示] 今天还没有 before 快照，没法对比。先跑：python main.py --stage before")
+            print("\n[提示] 还没采过 before，没法对比。先跑：python main.py --stage before")
         else:
             print(f"\n对比对象：{before['saved_at']} 的 before 快照")
             report_growth(before["rows"], to_growth_rows(hits))
+
+            # 落地：把这张增长表写成 xlsx（同一台设备、同一天，和快照放在一起）
+            today = datetime.date.today().isoformat()
+            xlsx = os.path.join(OUT_DIR, SERIAL, f"{today}.xlsx")
+            try:
+                write_excel(parse.growth(before["rows"], to_growth_rows(hits)), xlsx)
+                print(f"\n已写出表格：{xlsx}")
+            except ImportError:
+                print("\n[提示] 没装 openpyxl，表格没写出来。装一下：")
+                print("  python -m pip install openpyxl -i https://pypi.tuna.tsinghua.edu.cn/simple")

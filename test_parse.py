@@ -3,6 +3,9 @@
 跑：python -m pytest test_parse.py -v
 """
 
+import pytest
+
+import main
 import parse
 
 SAMPLE = open("samples/df-h-ldplayer14.txt", encoding="utf-8").read()
@@ -204,3 +207,41 @@ def test_growth_missing_on_either_side():
         ("/data/a", 100, None, None),   # 跑机后消失了
         ("/data/b", None, 50, None),    # 跑机后新出现
     ]
+
+# ---------------------------------------------------------------
+# Excel 输出：把增长表落成 xlsx
+# ---------------------------------------------------------------
+
+def test_write_excel(tmp_path):
+    """写出后重新读回来验证：表头 + 每行 + None 写空单元格。"""
+    pytest.importorskip("openpyxl")
+    out = tmp_path / "t.xlsx"
+    main.write_excel([("data", 100, 150, 50.0), ("data/x", None, 5, None)], str(out))
+
+    from openpyxl import load_workbook
+
+    ws = load_workbook(out).active
+    assert ws.max_row == 3                 # 表头 + 2 行
+    assert ws.cell(2, 1).value == "data"
+    assert ws.cell(2, 4).value == 50.0
+    assert ws.cell(3, 2).value is None     # 前值缺失 → 空单元格
+    assert ws.cell(3, 4).value is None     # 增长不可计算 → 空单元格
+
+def test_latest_before_picks_newest(tmp_path, monkeypatch):
+    """两次 before 快照，取修改时间最新的那个——跨天也能配上对。"""
+    import json
+    import os
+
+    monkeypatch.setattr(main, "OUT_DIR", str(tmp_path))
+    monkeypatch.setattr(main, "SERIAL", "dev")
+    folder = tmp_path / "dev"
+    folder.mkdir()
+
+    for name, when in (("2026-10-20-before.json", 1000), ("2026-10-21-before.json", 2000)):
+        p = folder / name
+        p.write_text(json.dumps({"stage": "before", "saved_at": name, "rows": []}), encoding="utf-8")
+        os.utime(p, (when, when))
+
+    got = main.latest_before()
+    assert got is not None
+    assert "2026-10-21" in got["saved_at"]
