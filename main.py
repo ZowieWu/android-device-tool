@@ -166,6 +166,14 @@ def write_excel(growth_rows: list, path: str) -> str:
     for p, b, a, pct in growth_rows:
         ws.append([p, b, a, None if pct is None else round(pct, 1)])
 
+    # 格式必须放在"数据写完"之后：
+    # 之前把这段放在 append 之前，ws.max_row 还只是 1 → range(2, 2) 是空区间 → 静默什么都没做。
+    ws.column_dimensions["A"].width = 40          # 路径列拉宽，别被截成 data/fon
+    for col in ("B", "C", "D"):
+        ws.column_dimensions[col].width = 12
+    for row_index in range(2, ws.max_row + 1):
+        ws.cell(row=row_index, column=4).number_format = '0.0"%"'
+
     wb.save(path)
     return path
 
