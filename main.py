@@ -202,9 +202,19 @@ if __name__ == "__main__":
             print(f"[错误] --stage 只能是 before 或 after，你给的是 {stage!r}")
             sys.exit(2)
 
+    # 项目额定百分比（先用参数 + 默认值；以后照 PRD 待确认第 2 条改成配置）
+    rated = 80.0
+    if "--rated" in sys.argv:
+        rated = float(sys.argv[sys.argv.index("--rated") + 1])
+
     if offline:
         with open("samples/du-data.txt", encoding="utf-8") as f:
             raw = f.read()
+        # 离线也能验使用率：如果存过 df -k 的样本就用它
+        raw_df = ""
+        if os.path.exists("samples/df-k-data.txt"):
+            with open("samples/df-k-data.txt", encoding="utf-8") as f:
+                raw_df = f.read()
     else:
         # 先自检，再采。不通过就带着人话退出，绝不交一张空表。
         ok, reason = check_device()
@@ -213,11 +223,20 @@ if __name__ == "__main__":
             print("\n已停止，未采集任何数据。")
             sys.exit(1)
         raw = run_on_device("du /data")
+        raw_df = run_on_device("df -k /data")
 
     paths = parse.load_paths("paths.example.txt")
     rows = parse.parse_du(raw)
     hits, misses = parse.match(rows, paths)
     report(rows, paths, hits, misses)
+
+    # 使用率：只看 df -k /data 的第一条数据行；真实百分比自己算，不用 Use% 列
+    df_rows = parse.parse_df(raw_df) if raw_df.strip() else []
+    if df_rows:
+        total_k, used_k, pct = parse.usage(df_rows[0])
+        print(f"\n/data 使用率：{pct:.2f}%"
+              f"（{parse.humanize(used_k)} / {parse.humanize(total_k)}）")
+        print("  " + parse.judge(pct, rated))
 
     if stage:
         saved = save_snapshot(stage, hits)

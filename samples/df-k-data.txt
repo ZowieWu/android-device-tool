@@ -1,0 +1,2 @@
+Filesystem      1K-blocks   Used Available Use% Mounted on
+/dev/block/sdb2  24170284 182100  23988184   1% /system/vendor/lib/arm/cpuinfo

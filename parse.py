@@ -117,6 +117,33 @@ def growth(before_rows: list, after_rows: list) -> list:
             result.append((path, None, ak, None))
 
     return result                      # ④ 最后返回
+def usage(row: list[str]) -> tuple[int, int, float]:
+    """从 `df -k` 的一行里算**真实**使用率。
+
+    row 形如：['/dev/block/sdb2', '24170284', '182100', '23988184', '1%', '/system/...']
+                                    total K      used K      avail K
+
+    两条铁律（都是踩出来的）：
+      1. **不要用 row[4] 的 Use%**——它是取整的（显示 1%，真实是 0.75%）。
+      2. **不要用 row[-1] 判断这是哪个路径**——同一设备有多个挂载点时，df 可能
+         返回另一条（/data 会显示成 /system/vendor/lib/arm/cpuinfo）。
+    """
+    total = int(row[1])
+    used = int(row[2])
+    pct = (used / total * 100) if total else 0.0
+    return total, used, round(pct, 2)
+
+
+def judge(pct: float, rated: float) -> str:
+    """把使用率和"项目额定百分比"比，返回一句人话结论。
+
+    ⚠️ 边界由你定：pct == rated 时算不算超标？定了就写进注释，别留模糊。
+    """
+    if pct > rated:
+        return f"超额定（{pct:.2f}% > 额定 {rated:g}%）"
+    return f"未超额定（{pct:.2f}% ≤ 额定 {rated:g}%）"
+
+
 def parse_du(output: str) -> list[list[str]]:
     """把 du 的输出拆开。
 

@@ -5,7 +5,7 @@
 
 ---
 
-## 一、现在在哪（2026-10-22 17:10）
+## 一、现在在哪（2026-10-23 15:40）
 
 **仓库已公开：**https://github.com/ZowieWu/android-device-tool
 
@@ -13,17 +13,20 @@
 
 ```bat
 python main.py --stage before      # 跑机前采一次，存快照
-python main.py --stage after       # 跑机后采一次 → 自动找最近一次 before → 出增长% + 写 xlsx
-python main.py --offline           # 不连设备：用 samples/du-data.txt
-python -m pytest -q                # 24 个测试全绿
+python main.py --stage after       # 跑机后采一次 → 自动找最近一次 before → 增长% + xlsx
+python main.py --offline           # 不连设备：用 samples/（du + df -k 两份样本）
+python main.py --rated 80          # 项目额定百分比（默认 80；等于额定值不算超标）
+python -m pytest -q                # 29 个测试全绿
 ```
 
 **产物位置**：`out/<串号>/<日期>-<阶段>.json`（快照）、`out/<串号>/<日期>.xlsx`（增长表）。
 
 | 函数 | 作用 |
 |---|---|
-| `parse_df()` | `df -h` → 每条 6 字段（`split(None, 5)`） |
+| `parse_df()` | `df -h` / `df -k` → 每条 6 字段（`split(None, 5)`；**按位置解析，列名会变**） |
 | `parse_du()` | `du` → 每条 2 字段（`split(None, 1)`） |
+| `usage(row)` | 从 `df -k` 一行算**真实**使用率：`used/total`，**不用取整的 Use% 列** |
+| `judge(pct, rated)` | 阈值判断 → 人话结论；**`pct == rated` 不算超标**，显示用 `≤`、精度 `:g` |
 | `load_paths()` | 读清单：跳过 `#` 注释和空行 |
 | `match(rows, paths)` | 按清单匹配 → `([(path,row)...], [未命中 path...])` |
 | `_key()` | 比较用的键：只剥前导 `/` |
@@ -34,7 +37,7 @@ python -m pytest -q                # 24 个测试全绿
 | `save_snapshot()` / `latest_before()` | 存快照 / **找最近一次 before（不管哪天）**——跨夜跑机也能配对 |
 | `write_excel()` | 增长表 → xlsx（表头 + 逐行 + `None` 写空；列宽 40/12；`0.0"%"` 格式） |
 
-**还不能做：**截图、判断层（阈值 / LLM）、真机验证、ADB 路径与串号的自动发现。
+**还不能做：内存采集（模板要"内存（M）"）、截图、判断层（LLM）、真机验证、ADB 路径与串号自动发现。**
 
 ---
 
@@ -83,9 +86,7 @@ python -m pytest -q                # 24 个测试全绿
 
 **下次打开就做（唯一的一件，10 分钟内能做完）：**
 
-**修配对逻辑：别用"日期"当业务主键。** 把 `load_snapshot("before")` 改成"**找最近一次 before 文件**"（不管哪天），而不是"今天的 before"。真实场景：晚上采 before → 跑机一整夜 → 第二天早上采 after，按日期配对会永远配不上。约 6 行 + 1 条测试（两个不同日期名的快照，验证"取最新的那个"）。
-
-（已完成：`write_excel()` + `--stage after` 自动写 `out/<串号>/<日期>.xlsx`；`None` 写空单元格；23 passed。）
+**采内存：`free -m` → 解析 → 输出。** 模板里"内存（M）"是**数据列**，但现在工具只采了磁盘（`du` + `df`），**内存一点都没采**。做法：`adb shell "free -m"` 取 `Mem:` 那一行（`total` / `used` 两个数），存成 `samples/free-m-data.txt`，写 `parse_free()`（跳过前两个标签列）+ 1 条测试。**验收：`python main.py --offline` 能多打印一行"内存 999M / 5944M"。**
 
 **执行顺序（2026-10-20 定：把最不确定的排最后）**
 
@@ -94,9 +95,11 @@ python -m pytest -q                # 24 个测试全绿
 | 1 | 启动自检 + 人话报错 | ✅ 10-21 完成（失败路径已验） |
 | 2 | 两次采集（before/after）+ 增长% | ✅ 10-21 完成（快照 + 自动对比） |
 | 3 | **最简 Excel**（表头 + 逐行 + None 写空） | ✅ 10-22 完成（已出 xlsx，5 行验证通过） |
-| 3b | **配对改成"最近一次 before"** | **下一个**（日期不是业务主键） |
-| 4 | 截图 | ⚠️ 方案未定（截终端 / 截屏幕），故意排后面 |
-| 5 | 完整 Excel（清单各行 × 两栏 + 按固件分 sheet）+ 判断层 | |
+| 3b | 配对改成"最近一次 before" | ✅ 10-22 完成（`latest_before()`） |
+| 3c | **使用率（`usage` + `judge` + `--rated`）** | ✅ 10-23 完成（真实 0.75%，不用 Use% 列） |
+| 4 | **内存采集（`free -m`）** | **下一个**（模板要"内存（M）"，现在缺） |
+| 5 | 截图 | ⚠️ 方案未定（截终端 / 截屏幕），**要先问同事** |
+| 6 | 完整 Excel（内存列 + 按固件分 sheet）+ 判断层（LLM） | |
 
 **为什么这么排：截图是唯一"方案未定、可能返工"的东西，不该挡在主链路上。先打通端到端，再补最难的。**
 
@@ -188,5 +191,6 @@ python -m pytest -q                # 24 个测试全绿
 - 10-21：留下了 growth() + 启动自检 + 两次采集快照，端到端跑通。
 - 10-22：留下了 **最简 Excel 落地**（`write_excel()` + `--stage after` 自动出 xlsx，打开验证 5 行）；**发现"日期当主键"的设计缺陷**（跨夜跑机配不上对）。
 - 10-22（同日第二格）：**配对改成"最近一次 before"**（跨夜可配）；**打磨 xlsx**（列宽 40/12、`0.0"%"`）——踩了顺序 bug（先设格式后写数据 → `range(2,2)` 空转，静默无效果）。
+- 10-23：留下了 **使用率闭环**（`df -k` 样本 → `usage()` 真实 0.75% → `judge()` 阈值判断 → `--rated` 参数 → 接进主流程）；**发现两个数据坑**（`Mounted on` 不可信、`Use%` 是取整的）；修了同一类显示精度 bug（`:g`）。
 - ~~父子目录并排~~ → 已判定不是 bug（模板本来就要父子都列），只有 `top_n` 排序场景会误导。
 

@@ -245,3 +245,37 @@ def test_latest_before_picks_newest(tmp_path, monkeypatch):
     got = main.latest_before()
     assert got is not None
     assert "2026-10-21" in got["saved_at"]
+
+# ---------------------------------------------------------------
+# 使用率：不许用 Use% 列，必须自己算（来自真实 df -k 数据）
+# ---------------------------------------------------------------
+
+DF_K_ROW = ["/dev/block/sdb2", "24170284", "182100", "23988184", "1%",
+            "/system/vendor/lib/arm/cpuinfo"]
+
+
+def test_usage_ignores_rounded_use_percent():
+    """真实数据：df 显示 1%，真值 0.75% —— 必须按 used/total 算，不能取 row[4]。"""
+    total, used, pct = parse.usage(DF_K_ROW)
+    assert total == 24170284
+    assert used == 182100
+    assert pct == 0.75          # 不是 1.0，也不是 0.8
+
+
+def test_judge_under_rated():
+    assert "未超" in parse.judge(50.0, 80.0)
+
+
+def test_judge_over_rated():
+    assert "超" in parse.judge(90.0, 80.0)
+
+
+# 边界那一条你自己写：pct == rated 时期望什么？
+def test_judge_at_boundary():
+    """等于额定值不算超标（我们的定义）—— 所以提示语里必须是 ≤。"""
+    assert parse.judge(80.0, 80.0).startswith("未超")
+
+
+def test_judge_keeps_rated_precision():
+    """额定值 0.5 不能显示成 0%——判断用的是 0.5，显示也必须是 0.5。"""
+    assert "0.5%" in parse.judge(0.75, 0.5)
