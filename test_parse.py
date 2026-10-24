@@ -279,3 +279,25 @@ def test_judge_at_boundary():
 def test_judge_keeps_rated_precision():
     """额定值 0.5 不能显示成 0%——判断用的是 0.5，显示也必须是 0.5。"""
     assert "0.5%" in parse.judge(0.75, 0.5)
+
+# ---------------------------------------------------------------
+# 内存：free -m 的 Mem 行（Android 是 4 行，不是 3 行）
+# ---------------------------------------------------------------
+
+FREE_SAMPLE = """              total        used        free      shared     buffers
+Mem:           5944        1037        4906           4           2
+-/+ buffers/cache:        1035        4908
+Swap:             0           0           0"""
+
+
+def test_parse_free_reads_mem_line():
+    """取 Mem: 行的 total 和 used（M）——不是第 2 行，也不是最后一行。"""
+    total, used = parse.parse_free(FREE_SAMPLE)
+    assert total == 5944
+    assert used == 1037
+
+
+def test_parse_free_raises_when_missing():
+    """找不到 Mem: 行时必须报错，不能返回 (0, 0) 冒充。"""
+    with pytest.raises(ValueError):
+        parse.parse_free("Swap:             0           0           0")

@@ -148,11 +148,13 @@ def report(rows: list, paths: list, hits: list, misses: list) -> None:
         print("全部命中。")
 
 
-def write_excel(growth_rows: list, path: str) -> str:
+def write_excel(growth_rows: list, path: str, *, mem_total=None, mem_used=None,
+                usage_pct=None) -> str:
     """把 growth() 的结果写成一张 xlsx。
 
-    表头：路径 / 前(K) / 后(K) / 增长%
-    规则：None 写成**空单元格**——不用 0 冒充，也不写 "None" 字符串。
+    左边 A–D：路径 / 前(K) / 后(K) / 增长%
+    右边 F–H：内存(M) / 总内存(M) / 使用率(%)  ← 和模板右侧那块对应
+    规则：`None` 写成**空单元格**——不用 0 冒充，也不写 "None" 字符串。
 
     `import openpyxl` 放在函数里：没装这个库时，其它功能照常能用，只有调用它才会报错。
     """
@@ -165,6 +167,15 @@ def write_excel(growth_rows: list, path: str) -> str:
 
     for p, b, a, pct in growth_rows:
         ws.append([p, b, a, None if pct is None else round(pct, 1)])
+
+    # 元信息写在右侧，不动左侧行号（否则下面 number_format 的范围就要跟着改）
+    if mem_used is not None:
+        ws["F1"], ws["F2"] = "内存(M)", mem_used
+    if mem_total is not None:
+        ws["G1"], ws["G2"] = "总内存(M)", mem_total
+    if usage_pct is not None:
+        ws["H1"], ws["H2"] = "使用率(%)", usage_pct
+        ws["H2"].number_format = "0.00"
 
     # 格式必须放在"数据写完"之后：
     # 之前把这段放在 append 之前，ws.max_row 还只是 1 → range(2, 2) 是空区间 → 静默什么都没做。
@@ -210,11 +221,15 @@ if __name__ == "__main__":
     if offline:
         with open("samples/du-data.txt", encoding="utf-8") as f:
             raw = f.read()
-        # 离线也能验使用率：如果存过 df -k 的样本就用它
+        # 离线也能验使用率和内存：如果存过样本就用它
         raw_df = ""
+        raw_free = ""
         if os.path.exists("samples/df-k-data.txt"):
             with open("samples/df-k-data.txt", encoding="utf-8") as f:
                 raw_df = f.read()
+        if os.path.exists("samples/free-m-data.txt"):
+            with open("samples/free-m-data.txt", encoding="utf-8") as f:
+                raw_free = f.read()
     else:
         # 先自检，再采。不通过就带着人话退出，绝不交一张空表。
         ok, reason = check_device()
@@ -224,19 +239,29 @@ if __name__ == "__main__":
             sys.exit(1)
         raw = run_on_device("du /data")
         raw_df = run_on_device("df -k /data")
+        raw_free = run_on_device("free -m")
 
     paths = parse.load_paths("paths.example.txt")
     rows = parse.parse_du(raw)
     hits, misses = parse.match(rows, paths)
     report(rows, paths, hits, misses)
 
+    # 先给默认值：没采到就是 None（空单元格），不是 0
+    mem_total = mem_used = usage_pct = None
+
+    # 内存（M）：模板里"内存（M）"是数据列，取 free -m 的 Mem: 行
+    if raw_free.strip():
+        mem_total, mem_used = parse.parse_free(raw_free)
+        print(f"\n内存：{mem_used}M / {mem_total}M"
+              f"（{mem_used / mem_total * 100:.1f}%）")
+
     # 使用率：只看 df -k /data 的第一条数据行；真实百分比自己算，不用 Use% 列
     df_rows = parse.parse_df(raw_df) if raw_df.strip() else []
     if df_rows:
-        total_k, used_k, pct = parse.usage(df_rows[0])
-        print(f"\n/data 使用率：{pct:.2f}%"
+        total_k, used_k, usage_pct = parse.usage(df_rows[0])
+        print(f"\n/data 使用率：{usage_pct:.2f}%"
               f"（{parse.humanize(used_k)} / {parse.humanize(total_k)}）")
-        print("  " + parse.judge(pct, rated))
+        print("  " + parse.judge(usage_pct, rated))
 
     if stage:
         saved = save_snapshot(stage, hits)
@@ -254,7 +279,8 @@ if __name__ == "__main__":
             today = datetime.date.today().isoformat()
             xlsx = os.path.join(OUT_DIR, SERIAL, f"{today}.xlsx")
             try:
-                write_excel(parse.growth(before["rows"], to_growth_rows(hits)), xlsx)
+                write_excel(parse.growth(before["rows"], to_growth_rows(hits)), xlsx,
+                            mem_total=mem_total, mem_used=mem_used, usage_pct=usage_pct)
                 print(f"\n已写出表格：{xlsx}")
             except ImportError:
                 print("\n[提示] 没装 openpyxl，表格没写出来。装一下：")

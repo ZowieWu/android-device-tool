@@ -149,3 +149,22 @@
 4. **`IndentationError` 会让编辑器到处画红线**：8 格 vs 4 格的缩进错误，报错只指一处，但红波浪线是**级联假象**。判据：`python -c "import parse"` 看第一处语法错误。
 
 **一句话：`df` 的输出里有两列不能信：`Mounted on` 和 `Use%`——"工具给的视图"和"底层事实"不是一回事。**
+---
+
+## 2026-10-25（日，凌晨补做 10-24 那格）—— 内存采集
+
+| 新增的东西 | 作用 | 解决了什么问题 | 用到了什么 |
+|---|---|---|---|
+| `samples/free-m-data.txt` | `free -m` 的真实输出（Android 4 行） | 算内存需要 total/used，之前只采了磁盘 | 采集时 stdout/stderr 分开；`type` 看真东西 |
+| `parse_free(output)` | 取 `Mem:` 行的 (total, used)，单位 M | 模板里"内存（M）"是数据列，工具却没采内存 | **按行首认行**（`startswith`）、`split()`、`int()`、`raise ValueError` |
+| 主流程打印内存 | `内存：1037M / 5944M（17.4%）` | 内存占用第一次出现在输出里 | 复用采集结构、百分比格式化 |
+| 2 条测试 | Mem 行取值 + 缺行必须报错 | 缺数据时不能返回 (0,0) 冒充 | `pytest.raises` |
+
+**坑：**
+1. **标签也占一段**：`Mem:` 行 `split()` 后 → `['Mem:', '5944', '1037', ...]`，所以数字从 `parts[1]` 开始。写成 `parts[0]` 时，报错 `ValueError: invalid literal for int() with base 10: 'Mem:'` **直接把问题指出来了**。
+2. **注释里靠空格对齐的示例会骗人**：docstring 一缩进，列就错位，照着数必错 → **关键索引要写死成 `parts[1]`，不要靠"看对齐"**。
+3. **Android 的 `free` 是 4 行、没有 `available` 列**：照 Linux 的列名写，一个都对不上。
+
+**一句话：同一个命令在不同平台输出不一样**——Android 的 `free` 是 4 行、没有 `available`。**照文档写的格式去解析，一个都对不上。**
+**补记（同日，xlsx 元信息）：** 把 `内存(M)` / `总内存(M)` / `使用率(%)` 写进表格**右侧 F/G/H 列**，而不是插到表头上面——**因为插行会让 `number_format` 的 `range(2, max_row)` 全部错位**（今天上午踩过的顺序 bug 的邻座）。
+设计决定：`write_excel(..., *, mem_total=None, mem_used=None, usage_pct=None)` 用**关键字参数**，没采到就是 `None` → 空单元格（不写 0）。

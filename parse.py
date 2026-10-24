@@ -2,6 +2,7 @@
 
 今天不需要模拟器：samples/ 里存着真实输出，离线就能开发。
 """
+from openpyxl.drawing import line
 
 
 def parse_df(output: str) -> list[list[str]]:
@@ -160,6 +161,36 @@ def parse_du(output: str) -> list[list[str]]:
         parts = line.split(None, 1)  # 最多切 1 刀 → 2 段
         rows.append(parts)
     return rows
+
+
+def parse_free(output: str) -> tuple[int, int]:
+    """从 `free -m` 里取 `Mem:` 行的 (total, used)，单位 M。
+
+    Android（toybox）的真实输出是 **4 行**，和 Linux 不一样：
+
+                            total       used        free      shared     buffers
+        Mem:                 5944        1037        4906           4           2
+        -/+ buffers/cache:   1035        4908
+        Swap:                  0           0           0
+
+    三个坑：
+      1. 有 4 行（多了 `-/+ buffers/cache`），不是 3 行 → 别按行号取。
+      2. 那一行的标签**含空格和斜杠**，`split()` 后 `parts[0]` 是 `-/+` → 别按"第一段当标签"。
+      3. 列名是 `buffers`，**没有 `available`**（Linux 的列名在这里不成立）。
+      → 正确做法：**按整行开头认行**。
+
+    索引（**别靠上面那段空格去数，靠这一行**）：
+      `Mem:` 行 split 之后 → `['Mem:', '5944', '1037', '4906', '4', '2']`
+      即：`parts[0]` = 标签，`parts[1]` = total，`parts[2]` = used。
+
+    取值口径（已定）：取 `Mem:` 行的 `used`，**不用** `-/+ buffers/cache` 的净占用
+    ——因为它和 `total` 同一行、同源，算占比时口径一致。
+    """
+    for line in output.splitlines():
+        if line.startswith("Mem:"):
+            parts = line.split()
+            return int(parts[1]), int(parts[2])     # ← total 是第几个？used 是第几个？
+    raise ValueError("没找到 Mem: 行")
 
 
 def top_n(rows: list[list[str]], n: int = 5) -> list[tuple[int, str]]:
