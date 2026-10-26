@@ -189,6 +189,45 @@ def write_excel(growth_rows: list, path: str, *, mem_total=None, mem_used=None,
     return path
 
 
+def save_artifacts(stage: str, *, du_text: str, df_text: str, free_text: str,
+                   hits: list, misses: list, usage_pct=None,
+                   mem_total=None, mem_used=None) -> str:
+    """把一次采集的**原始输出 + 元信息**落盘，便于事后回查。
+
+    这是"截图"的降级替身（截图方案还没定）：
+    截图是给眼睛看的证据；这里给的是**可复现的证据**——原始输出原样保存，任何人能重跑解析。
+
+    目录：`out/<串号>/<日期>-<阶段>/`
+    文件：`du.txt` / `df-k.txt` / `free-m.txt` / `meta.json`
+
+    注意 `newline="\\n"`：Python 在 Windows 上写文本默认转 CRLF，
+    这里强制写 LF，跟仓库 `.gitattributes` 的规则一致。
+    """
+    today = datetime.date.today().isoformat()
+    folder = os.path.join(OUT_DIR, SERIAL, f"{today}-{stage}")
+    os.makedirs(folder, exist_ok=True)
+
+    for name, text in (("du.txt", du_text), ("df-k.txt", df_text), ("free-m.txt", free_text)):
+        with open(os.path.join(folder, name), "w", encoding="utf-8", newline="\n") as f:
+            f.write(text)
+
+    meta = {
+        "stage": stage,
+        "serial": SERIAL,
+        "saved_at": datetime.datetime.now().isoformat(timespec="seconds"),
+        "hit_count": len(hits),
+        "miss_count": len(misses),
+        "misses": misses,
+        "usage_pct": usage_pct,
+        "mem_used_m": mem_used,
+        "mem_total_m": mem_total,
+    }
+    with open(os.path.join(folder, "meta.json"), "w", encoding="utf-8", newline="\n") as f:
+        json.dump(meta, f, ensure_ascii=False, indent=2)
+
+    return folder
+
+
 def report_growth(before_rows: list, after_rows: list) -> None:
     print("\n增长（跑机前 → 跑机后）：")
     print(f"  {'路径':32s} {'前':>9s} {'后':>9s} {'增长':>8s}")
@@ -266,6 +305,12 @@ if __name__ == "__main__":
     if stage:
         saved = save_snapshot(stage, hits)
         print(f"\n已存快照（{stage}）：{saved}")
+
+        # 存档降级版：原始输出 + 元信息，事后能回查"当时设备返回了什么"
+        folder = save_artifacts(stage, du_text=raw, df_text=raw_df, free_text=raw_free,
+                                hits=hits, misses=misses, usage_pct=usage_pct,
+                                mem_total=mem_total, mem_used=mem_used)
+        print(f"已存原始输出与元信息：{folder}")
 
     if stage == "after":
         before = latest_before()

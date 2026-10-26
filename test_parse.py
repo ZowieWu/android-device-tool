@@ -301,3 +301,25 @@ def test_parse_free_raises_when_missing():
     """找不到 Mem: 行时必须报错，不能返回 (0, 0) 冒充。"""
     with pytest.raises(ValueError):
         parse.parse_free("Swap:             0           0           0")
+
+def test_save_artifacts_writes_four_files(tmp_path, monkeypatch):
+    """四个文件齐全 + meta 内容对 + 换行是 LF（不是 CRLF）。"""
+    import json
+    import os
+
+    monkeypatch.setattr(main, "OUT_DIR", str(tmp_path))
+    monkeypatch.setattr(main, "SERIAL", "dev")
+
+    folder = main.save_artifacts(
+        "before", du_text="1\t/data/a\n", df_text="h\nr\n", free_text="Mem: 1 1\n",
+        hits=[("data/a", ["1", "/data/a"])], misses=["data/b"],
+        usage_pct=1.5, mem_total=100, mem_used=50,
+    )
+
+    assert sorted(os.listdir(folder)) == ["df-k.txt", "du.txt", "free-m.txt", "meta.json"]
+    meta = json.load(open(os.path.join(folder, "meta.json"), encoding="utf-8"))
+    assert meta["misses"] == ["data/b"]
+    assert meta["usage_pct"] == 1.5
+
+    # 关键：以二进制读，确认没有 CRLF
+    assert b"\r\n" not in open(os.path.join(folder, "du.txt"), "rb").read()
