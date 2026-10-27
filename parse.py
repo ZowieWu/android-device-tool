@@ -193,6 +193,56 @@ def parse_free(output: str) -> tuple[int, int]:
     raise ValueError("没找到 Mem: 行")
 
 
+def build_prompt(growth_rows: list, *, usage_pct=None, mem_used=None,
+                 mem_total=None) -> str:
+    """把"增长结果 + 整体状态"拼成一段给模型看的 prompt。
+
+    **必须包含这 5 个要素**（顺序你定）：
+
+      1. 任务：判断这台设备跑机后有没有异常
+      2. 增长最大的 3 条：路径 + 前 + 后 + 增长%
+      3. 整体：/data 使用率 x%（额定 y%）、内存 used/total
+      4. 要求：**只输出一句话** —— 是否异常 + 建议动作
+      5. 约束：不要复述数据、不要解释过程
+
+    为什么只挑"最大的 3 条"而不是全部：**表有几十行，全塞进去既费 token 又淹没重点。**
+
+    提示：`growth_rows` 里 `pct` 可能是 `None`（前值为 0），排序时要能处理它。
+    """
+    top = [r for r in growth_rows if r[3] is not None]      # 去掉算不出增长%的
+    # 按"绝对增长量"排，不按增长%：1K→2K 是 +100%，但对设备毫无影响；
+    # 真正让存储满的是绝对量（比如 200M → 400M）。
+    top.sort(key=lambda r: (r[2] - r[1]), reverse=True)
+    top = top[:3]
+
+    lines = ["你是设备测试助手。下面是一台 Android 设备「跑机前 vs 跑机后」的磁盘增长数据。", ""]
+
+    # 要素 2：增长最大的 3 条（只给重点，不塞整张表）
+    lines.append("增长最大的 3 条：")
+    if top:
+        for path, b, a, pct in top:
+            lines.append(f"- {path}：{b}K → {a}K（{pct:+.1f}%）")
+    else:
+        lines.append("- （没有可用数据）")
+    lines.append("")
+
+    # 要素 3：整体状态（缺了写"未知"，不写 0）
+    lines.append("整体：")
+    lines.append(f"- /data 使用率：{usage_pct:.2f}%" if usage_pct is not None
+                 else "- /data 使用率：未知")
+    lines.append(f"- 内存：{mem_used}M / {mem_total}M" if (mem_used is not None and mem_total)
+                 else "- 内存：未知")
+    lines.append("")
+
+    # 要素 4 + 5：要求与约束（把"不要做什么"也写清，比只写"要做什么"有效）
+    lines.append("要求：")
+    lines.append("1. 只输出一句话：有没有异常 + 建议动作。")
+    lines.append("2. 不要复述数据，不要解释推理过程。")
+    lines.append("3. 如果所有增长都接近 0，直接说「无明显异常」，不要编造原因。")
+
+    return "\n".join(lines)
+
+
 def top_n(rows: list[list[str]], n: int = 5) -> list[tuple[int, str]]:
     """按占用从大到小取前 n 条，返回 [(大小K, 路径), ...]。
 

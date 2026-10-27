@@ -38,6 +38,48 @@ def run_on_device(command: str) -> str:
     return result.stdout
 
 
+def call_llm(prompt: str, *, timeout: int = 30) -> str:
+    """调 DeepSeek（OpenAI 兼容接口），返回模型的一句话。
+
+    **key 从环境变量读，绝不写进代码、更不进仓库**（仓库是 public 的）。
+    没 key 就 raise —— 缺就说缺，不假装有结果。
+
+    用标准库 `urllib`，不引入新依赖：这个功能一年调几十次，不值得为它装 SDK。
+    """
+    import json as _json
+    import urllib.request
+
+    key = os.environ.get("DEEPSEEK_API_KEY")
+    if not key:
+        raise RuntimeError(
+            "没有 DEEPSEEK_API_KEY 环境变量。设置方法：\n"
+            "  set DEEPSEEK_API_KEY=sk-xxxx        （当前窗口有效）\n"
+            "  setx DEEPSEEK_API_KEY \"sk-xxxx\"     （永久，重开终端生效）"
+        )
+
+    body = _json.dumps({
+        "model": "deepseek-chat",
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.2,
+        "max_tokens": 200,
+    }).encode("utf-8")
+
+    req = urllib.request.Request(
+        "https://api.deepseek.com/chat/completions",
+        data=body,
+        headers={"Content-Type": "application/json",
+                 "Authorization": f"Bearer {key}"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            payload = _json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        raise RuntimeError(f"调用模型失败：{e}") from e
+
+    return payload["choices"][0]["message"]["content"].strip()
+
+
 def check_device() -> tuple[bool, str]:
     """开跑前自检：返回 (能不能跑, 人话原因)。
 
@@ -323,10 +365,23 @@ if __name__ == "__main__":
             # 落地：把这张增长表写成 xlsx（同一台设备、同一天，和快照放在一起）
             today = datetime.date.today().isoformat()
             xlsx = os.path.join(OUT_DIR, SERIAL, f"{today}.xlsx")
+            growth = parse.growth(before["rows"], to_growth_rows(hits))
             try:
-                write_excel(parse.growth(before["rows"], to_growth_rows(hits)), xlsx,
+                write_excel(growth, xlsx,
                             mem_total=mem_total, mem_used=mem_used, usage_pct=usage_pct)
                 print(f"\n已写出表格：{xlsx}")
             except ImportError:
                 print("\n[提示] 没装 openpyxl，表格没写出来。装一下：")
                 print("  python -m pip install openpyxl -i https://pypi.tuna.tsinghua.edu.cn/simple")
+
+            # 判断层：默认只打印 prompt（干跑，不需要 key）；加 --llm 才真发
+            prompt = parse.build_prompt(growth, usage_pct=usage_pct,
+                                        mem_used=mem_used, mem_total=mem_total)
+            if "--llm" in sys.argv:
+                try:
+                    print("\n[模型判断] " + call_llm(prompt))
+                except RuntimeError as e:
+                    print(f"\n[提示] {e}")
+            else:
+                print("\n[要发给模型的 prompt；加 --llm 才会真发]")
+                print(prompt)

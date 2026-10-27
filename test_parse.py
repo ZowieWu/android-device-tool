@@ -323,3 +323,24 @@ def test_save_artifacts_writes_four_files(tmp_path, monkeypatch):
 
     # 关键：以二进制读，确认没有 CRLF
     assert b"\r\n" not in open(os.path.join(folder, "du.txt"), "rb").read()
+
+# ---------------------------------------------------------------
+# 判断层：build_prompt（没有 API key 也能开发和测试它）
+# ---------------------------------------------------------------
+
+def test_build_prompt_contains_key_facts():
+    """增长最大的必须出现、使用率/内存要在、长度要有上限。"""
+    rows = [("data/local", 100, 112, 12.0), ("data/fonts", 24, 24, 0.0)]
+    prompt = parse.build_prompt(rows, usage_pct=0.75, mem_used=1037, mem_total=5944)
+
+    assert "data/local" in prompt
+    assert "0.75" in prompt
+    assert "1037" in prompt
+    assert len(prompt) < 800
+
+
+def test_build_prompt_handles_none_pct():
+    """前值为 0 的条目（pct 是 None）不能让它崩，也不能混进"增长最大"里。"""
+    rows = [("data/new", 0, 100, None), ("data/local", 100, 112, 12.0)]
+    prompt = parse.build_prompt(rows, usage_pct=1.0, mem_used=10, mem_total=100)
+    assert "data/local" in prompt
