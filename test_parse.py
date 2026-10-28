@@ -144,13 +144,27 @@ def test_key_strips_only_leading_slash():
 # 第六格的规格：load_paths()（读清单：跳过 # 注释和空行）
 # ---------------------------------------------------------------
 
-def test_load_paths_skips_comments_and_blanks():
+def test_load_paths_skips_comments_and_blanks(tmp_path):
+    """锁"规则"，不锁"示例文件的具体内容"。
+
+    曾经的写法是 `assert paths[0] == "data/fonts"`——那是把测试焊死在
+    paths.example.txt 的第一行上，示例清单一改就红，**而代码其实是对的**。
+    → 所以这里自己造一个输入文件，规则（跳注释/跳空行/去空格/保顺序）全都能测到。
+    """
+    f = tmp_path / "paths.txt"
+    f.write_text("# 注释行\n\ndata/fonts\n  data/local  \n# 尾注释\ndata\n", encoding="utf-8")
+
+    paths = parse.load_paths(str(f))
+
+    assert paths == ["data/fonts", "data/local", "data"]   # 顺序不变、空格被去掉
+
+
+def test_load_paths_example_file_is_usable():
+    """示例文件本身要能用（只断言"非空、没有注释混进来"，不锁具体内容）。"""
     paths = parse.load_paths("paths.example.txt")
     assert paths, "清单不能为空"
     assert all(not p.startswith("#") for p in paths)
     assert all(p.strip() for p in paths), "空行必须被跳过"
-    assert paths[0] == "data/fonts"      # 第一个非注释、非空行
-    assert "data" in paths
 
 # ---------------------------------------------------------------
 # 练习：top_n()（排序 + lambda）

@@ -14,7 +14,7 @@
 ```bat
 python main.py --stage before      # 跑机前采一次，存快照
 python main.py --stage after       # 跑机后采一次 → 自动找最近一次 before → 增长% + xlsx
-python main.py --offline           # 不连设备：用 samples/（du + df -k 两份样本）
+python main.py --offline           # 不连设备：用 samples/（du + df -k + free -m 三份样本）
 python main.py --rated 80          # 项目额定百分比（默认 80；等于额定值不算超标）
 python -m pytest -q                # 34 个测试全绿
 ```
@@ -212,5 +212,7 @@ python -m pytest -q                # 34 个测试全绿
 - 10-26：留下了 **存档降级版**（`du.txt`/`df-k.txt`/`free-m.txt`/`meta.json`，全 LF 保真）；坑：`open(newline="\n")` 才能压住 Windows 的 CRLF。
 - 10-27：留下了 **prompt 生成 + call_llm() 接线**（干跑可打印，`--llm` 才真发）；修正两处：按绝对增长量排序、加"全 0 时别编造"约束。
 - 10-27（补充）：**真调打通** —— `--llm` 返回「无明显异常」，跨天配对也成立（对比的是 10-22 的 before）。验收 6 条里已过 4 条，只剩 README 补段 + 演示录屏。
+- 10-28（第二格）：**清单从 7 条扩到 28 条**（命中 4/7 → **25/28**）——杠杆 = 清单长度 × 采集次数，7 条的清单工具和手工一样快。发现：`~~xxxx` 混淆目录不能进清单、`/data/data` 与 `/data/user/0` 同源只能列一个、**清单变了旧快照就不能比（表里全是 —）**。
 - 10-28：留下了 **README 第六节「判断层」**（怎么跑 + 6 个 prompt 设计决定 + 实测输出 + 合规提醒）；验收 6 条过 5 条。
+
 

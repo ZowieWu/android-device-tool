@@ -1,22 +1,51 @@
 # 路径清单（示例文件）
 #
-# 真实清单是内部资料，不进这个公开仓库。
-# 程序只认清单里出现的路径，其余的都不进表。
-# 以 # 开头的行是注释，空行忽略。
+# 真实清单是内部资料，不进这个公开仓库（但结构完全一样：一行一个路径）。
+# 程序只认清单里出现的路径，其余的都不进表。以 # 开头的行是注释，空行忽略。
 #
-# 注意两件事：
+# 注意四件事：
 # 1) 这是 du 的路径（子目录），不是 df 的挂载点（/data /dev /mnt 那种）。
 # 2) 内部表格的写法是"没有前导斜杠"的，而 du 的输出带前导斜杠。
 #    → 所以匹配时必须先归一化，否则一条都匹配不上（而且不会报错）。
+# 3) 只放"稳定"的路径：/data/app/~~NAiKwIaegG3g... 这类混淆目录每次安装都变，
+#    今天写进清单，明天就命中不了。**包名（com.xxx）是稳定的，可以写死。**
+# 4) /data/data 和 /data/user/0 是同一个目录的两种路径（实测大小完全一样），
+#    只列一个；否则表格里会出现两行一模一样的数字，看起来像 bug。
 
-data/fonts
-data/local
-data/log
-data/ota_cache
+# ---- 顶层大类（回答"一共占多少、哪块最大"）----
 data
+data/app
+data/local
+data/media
+data/misc
+data/system
+data/system_ce
+data/user
+data/user_de
+data/dalvik-cache
 
-# 下面两条是故意写的"设备上不存在"的路径，用来验证 misses 逻辑真的会被跑到。
-# 注意：`data/log` 也不在本机样本里，但它是**环境里真没有**，不是故意造的。
-# 两种都会出现在"未命中"里 —— 工具只说事实，判断是人做的。
+# ---- 常见的大子目录 ----
+data/local/file-cache
+data/local/zte-hnegi
+data/media/0
+data/media/0/Android
+data/media/0/Pictures
+data/misc/shared_relro
+data/misc/profiles
+data/system_ce/0
+data/user_de/0
+
+# ---- 按应用拆（包名稳定，可以写死）----
+data/data
+data/data/com.android.launcher3
+data/data/com.android.launcher3/cache
+data/data/com.android.providers.media.module
+data/data/com.android.providers.media.module/databases
+data/data/com.android.providers.contacts
+
+# ---- 下面三条是"设备上不存在"的路径，用来验证 misses 逻辑真的会被跑到 ----
+# `data/log` 是**环境里真没有**（有些 Android 版本没这个目录），不是故意造的；
+# 后两条是故意造的。两种都会出现在"未命中"里 —— 工具只说事实，判断是人做的。
+data/log
 data/DivideDebug
 data/DivideAI/ai_data
